@@ -46,6 +46,14 @@ Default output format [None]:
 ~~~  
 We have successfully configured the basic requirements in the master server, Now lest create the ansible playbook for the Ansible Dynamic inventory and site hosting.
 
+### Adding webssite files
+~~~sh
+wget https://www.tooplate.com/zip-templates/2123_simply_amazed.zip
+unzip 2123_simply_amazed.zip
+mv 2123_simply_amazed website
+~~~
+
+
 ### Inventory - hosts
 ~~~sh  
 localhost ansible_connection=local ansible_python_interpreter=/usr/bin/python3
@@ -284,3 +292,6 @@ localhost                  : ok=6    changed=1    unreachable=0    failed=0    s
 ### Outcome
 
 Using Ansible Dynamic Inventory, We succesfully created EC instance with SG, Keypair and hosted a HTML site.
+
+![verification](https://user-images.githubusercontent.com/98936958/158027431-15127e83-0ec1-4048-bc97-66e982eb89d2.PNG)
+
