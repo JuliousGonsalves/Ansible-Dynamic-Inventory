@@ -1,0 +1,13 @@
+.ansible/
+.aws/
+.bash_logout
+.bash_profile
+.bashrc
+.cache/
+.cshrc
+.ssh/
+.tcshrc
+.viminfo
+gitkey
+uber.pem
+website/

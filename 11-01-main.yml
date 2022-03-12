@@ -1,0 +1,153 @@
+---
+
+- name: "AWS infrastructure creation using Ansible"
+  hosts: localhost
+  vars:
+    aws_profile: "ansible-dev"
+    region: "ap-south-1"
+    project: "uber"
+    instance_type : "t2.micro"
+    ami_id: "ami-0e0ff68cb8e9a188a"
+    ansible_port: 22
+    ansible_user: "ec2-user"
+
+  tasks:
+    - name: "Creating ec2-key pair"
+      amazon.aws.ec2_key:
+        profile: "{{aws_profile}}"
+        region: "{{region}}"
+        name: "{{project}}"
+        state: present
+        tags:
+          Name: "{{project}}"
+          project: "{{project}}"
+
+      register: key_status
+
+    - name: "making a copy of private key in local machine"
+      when: key_status.changed == true
+      copy:
+        content: "{{key_status.key.private_key}}"
+        dest: "{{project}}.pem"
+        mode: 0400
+
+    - name: "Security group for webserver to allow 80.443 and 3306 for Db"
+      amazon.aws.ec2_group:
+        name: "{{project}}-webserver"
+        description: "SG to allow ports 80,443 for webserver"
+        profile: "{{aws_profile}}"
+        region: "{{region}}"
+        rules:
+          - proto: tcp
+            from_port: 80
+            to_port: 80
+            cidr_ip: 0.0.0.0/0
+            rule_desc: allow all on port 80
+          - proto: tcp
+            from_port: 443
+            to_port: 443
+            cidr_ip: 0.0.0.0/0
+            rule_desc: allow all on port 443
+          - proto: tcp
+            from_port: 3306
+            to_port: 3306
+            cidr_ip: 0.0.0.0/0
+            rule_desc: allow all on port 3306
+
+
+        tags:
+          Name: "{{project}}-webserver"
+          project: "{{project}}"
+
+      register: webserver
+
+    - name: "Security group for webserver to allow 22 for ssh"
+      amazon.aws.ec2_group:
+        name: "{{project}}-ssh"
+        description: "SG to allow ports 22 for webserver"
+        profile: "{{aws_profile}}"
+        region: "{{region}}"
+        rules:
+          - proto: tcp
+            from_port: 22
+            to_port: 22
+            cidr_ip: 0.0.0.0/0
+            rule_desc: allow all on port 22
+
+        tags:
+          Name: "{{project}}-ssh"
+          project: "{{project}}"
+
+      register: ssh
+
+
+    - name: "Creating Ec-2 Instance for webserver"
+      amazon.aws.ec2:
+        profile: "{{aws_profile}}"
+        region: "{{region}}"
+        key_name: "{{key_status.key.name}}"
+        instance_type: "{{instance_type}}"
+        image: "{{ami_id}}"
+        group_id:
+          - "{{ webserver.group_id }}"
+          - "{{ ssh.group_id }}"
+        wait: yes
+        instance_tags:
+          Name: "{{project}}-webserver"
+          project: "{{project}}"
+
+        count_tag:
+          project: "{{project}}"
+        exact_count: 2
+
+      register: instance_status
+
+    - name: "setting  up Dynamic Inventory"
+      add_host:
+        name: "{{item.public_ip}}"
+        groups: "amazon"
+        ansible_host: "{{item.public_ip}}"
+        ansible_port: "{{ansible_port}}"
+        ansible_user: "{{ansible_user}}"
+        ansible_ssh_private_key_file: "{{ project }}.pem"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+      
+      with_items:
+        - "{{instance_status.tagged_instances}}"        
+      
+
+    - name: "Addiing wait time"
+      when: instance_status.changed == true
+      wait_for:
+        timeout: 100
+
+- name: "Provision EC2 instance for webserver"
+  hosts: amazon
+  become: true
+  tasks:
+
+    - name: "Installing Apache webserver"
+      yum: 
+        name: httpd
+        state: present
+
+    - name: "Copying website files to document root"
+      copy:
+        src: /root/website/
+        dest: /var/www/html/
+        owner: apache
+        group: apache
+
+    - name: "Restart/Enable Apache service"
+      service:
+        name: httpd
+        state: restarted
+        enabled: true
+
+    - name: "Getting website url"
+      run_once: true
+      debug:
+        msg: "http://{{item}}"
+      with_items:
+        - "{{groups.amazon}}"
+         
